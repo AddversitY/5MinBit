@@ -39,6 +39,11 @@ from btc5m.storage.store import data_dir
 
 log = get_logger("dataset")
 DATA_LAG_S = 1  # exchange data for second s is assumed usable from s+1+DATA_LAG_S
+# Data API trade timestamps are block times; measured against the live WebSocket match
+# timestamps they lag by a median 2.2 s (p05 1.2 s; RESEARCH.md). Market lookups are shifted by
+# this offset so the historical market price at t reflects trades matched before ~t. Rounding
+# down to 2 s errs in the market's favour (slight look-ahead for the market, never the model).
+PM_TS_OFFSET_S = 2.0
 
 _G: dict = {}  # globals shared with worker processes (fork copy-on-write)
 
@@ -142,11 +147,11 @@ def _round_rows(r: dict) -> list[dict]:
         f = compute_features(snap)
         f.update(common)
         if rt is not None:
-            mi = implied_at(rt, t)
+            mi = implied_at(rt, t + PM_TS_OFFSET_S)
             f.update(mi)
             for lat in (2.0, 5.0):
-                f[f"fill_up_l{int(lat)}"] = fill_price(rt, t, True, latency=lat)
-                f[f"fill_dn_l{int(lat)}"] = fill_price(rt, t, False, latency=lat)
+                f[f"fill_up_l{int(lat)}"] = fill_price(rt, t + PM_TS_OFFSET_S, True, latency=lat)
+                f[f"fill_dn_l{int(lat)}"] = fill_price(rt, t + PM_TS_OFFSET_S, False, latency=lat)
         rows.append(f)
     return rows
 
@@ -203,7 +208,7 @@ def build_dataset(source: str = "kraken", workers: int | None = None, out: Path 
     df.to_parquet(out, index=False)
     meta = {
         "built_at": time.time(), "rows": len(df), "rounds": int(df["start"].nunique()) if len(df) else 0,
-        "code_version": code_version(), "data_lag_s": DATA_LAG_S, "lookback_s": LOOKBACK, "source": source,
+        "code_version": code_version(), "data_lag_s": DATA_LAG_S, "pm_ts_offset_s": PM_TS_OFFSET_S, "lookback_s": LOOKBACK, "source": source,
         "first_round": int(df["start"].min()) if len(df) else None, "last_round": int(df["start"].max()) if len(df) else None,
         "pm_markets": len(pm), "elapsed_s": round(time.time() - t_start, 1),
     }

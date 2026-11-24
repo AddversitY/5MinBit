@@ -104,6 +104,8 @@ def compute_features(s: Snapshot) -> dict:
     f["d"] = (now - s.ptb) / (sig * math.sqrt(max(f["rem"], 1.0)))
     f["z"] = (exp_settle - s.ptb) / (sig * math.sqrt(max(vt, 1e-6)))
     f["p_gauss"] = norm_cdf(f["z"])
+    pg = min(max(f["p_gauss"], 1e-4), 1 - 1e-4)
+    f["lp_gauss"] = math.log(pg / (1 - pg))  # Gaussian log-odds: base margin for residual models
     # gap between the round-open reference and the price to beat (TWAP lag effect)
     i_open = len(ref) - 1 - k if 0 <= k < len(ref) else None
     if i_open is not None and k > 0:
@@ -168,7 +170,7 @@ def compute_features(s: Snapshot) -> dict:
 
 # Features computable both historically and live (the validated set).
 CORE_FEATURES = [
-    "k", "rem", "z", "d", "open_gap", "ret_since_open",
+    "k", "rem", "z", "lp_gauss", "d", "open_gap", "ret_since_open",
     "rv60", "rv300", "rv900", "rv_1h", "rv_4h", "sigma_rel", "vol_ratio_60_900", "vol_ratio_300_1h", "vol_pct_7d",
     *[f"m{h}" for h in MOM_H], "acc15", "ema120_dev", "up_frac60", "m15_x_m120",
     "ofi15", "ofi60", "ofi300", "svol15", "svol60", "svol300", "cvd_round", "intensity60", "vol_intensity60", "large_net60", "vwap300_dev",
@@ -177,7 +179,7 @@ CORE_FEATURES = [
 
 # Feature groups for ablation tests
 FEATURE_GROUPS = {
-    "distance": ["z", "d", "open_gap", "ret_since_open"],
+    "distance": ["z", "lp_gauss", "d", "open_gap", "ret_since_open"],
     "volatility": ["rv60", "rv300", "rv900", "rv_1h", "rv_4h", "sigma_rel", "vol_ratio_60_900", "vol_ratio_300_1h", "vol_pct_7d"],
     "momentum": [f"m{h}" for h in MOM_H] + ["acc15", "m15_x_m120", "up_frac60"],
     "mean_reversion": ["ema120_dev", "vwap300_dev"],

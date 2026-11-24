@@ -18,26 +18,36 @@ from btc5m.rules import FeeSchedule
 def simulate(df: pd.DataFrame, p: np.ndarray, edge: float = 0.0, latency: int = 2, fee: FeeSchedule | None = None, slip: float = 0.01, use_market_fee: bool = False) -> pd.DataFrame:
     """Return one row per executed hypothetical trade."""
     fee = fee or FeeSchedule(0.05, 1.0)
-    up_px = df[f"fill_up_l{latency}"].to_numpy()
-    dn_px = df[f"fill_dn_l{latency}"].to_numpy()
+    p = np.asarray(p, float)
     y = df["y"].to_numpy()
-    rows = []
-    for i in range(len(df)):
-        fs = FeeSchedule(df["fee_rate"].iat[i], df["fee_exponent"].iat[i]) if use_market_fee else fee
-        best = None
-        for side, px, pw in (("up", up_px[i], p[i]), ("down", dn_px[i], 1 - p[i])):
-            if not np.isfinite(px) or px <= 0 or px >= 1:
-                continue
-            cost = min(px + slip, 0.999)
-            f = fs.taker_fee_per_share(cost)
-            ev = pw - cost - f
-            if ev > edge and (best is None or ev > best[3]):
-                best = (side, cost, f, ev)
-        if best:
-            side, cost, f, ev = best
-            win = (y[i] == 1) if side == "up" else (y[i] == 0)
-            rows.append({"start": int(df["start"].iat[i]), "k": float(df["k"].iat[i]), "side": side, "price": cost, "fee": f, "exp_edge": ev, "win": int(win), "pnl": float(win) - cost - f})
-    return pd.DataFrame(rows)
+    if use_market_fee:
+        rate = df["fee_rate"].fillna(fee.rate).to_numpy(float)
+        expo = df["fee_exponent"].fillna(fee.exponent).to_numpy(float)
+    else:
+        rate = np.full(len(df), fee.rate)
+        expo = np.full(len(df), fee.exponent)
+
+    def leg(px, pw):
+        ok = np.isfinite(px) & (px > 0) & (px < 1)
+        cost = np.minimum(np.where(ok, px, np.nan) + slip, 0.999)
+        f = np.round(rate * (cost * (1 - cost)) ** expo, 5)
+        ev = pw - cost - f
+        return cost, f, np.where(ok, ev, -np.inf)
+
+    cu, fu, evu = leg(df[f"fill_up_l{latency}"].to_numpy(float), p)
+    cd, fd, evd = leg(df[f"fill_dn_l{latency}"].to_numpy(float), 1 - p)
+    up = evu >= evd
+    ev = np.where(up, evu, evd)
+    take = ev > edge
+    if not take.any():
+        return pd.DataFrame(columns=["start", "k", "side", "price", "fee", "exp_edge", "win", "pnl"])
+    cost = np.where(up, cu, cd)[take]
+    f = np.where(up, fu, fd)[take]
+    win = np.where(up[take], y[take] == 1, y[take] == 0).astype(int)
+    return pd.DataFrame({
+        "start": df["start"].to_numpy()[take].astype(int), "k": df["k"].to_numpy()[take].astype(float),
+        "side": np.where(up[take], "up", "down"), "price": cost, "fee": f, "exp_edge": ev[take], "win": win, "pnl": win - cost - f,
+    })
 
 
 def max_drawdown(pnl: np.ndarray) -> float:
@@ -53,7 +63,7 @@ def summarize_trades(tr: pd.DataFrame, n_rounds: int) -> dict:
         return {"trades": 0, "rounds": n_rounds}
     tr = tr.sort_values("start")
     pnl = tr["pnl"].to_numpy()
-    days = (tr["start"] // 86400).to_numpy()
+    days = (tr["start"] // (4 * 3600)).to_numpy()  # 4-hour bootstrap blocks
     point, lo, hi = day_block_bootstrap(lambda idx: float(np.mean(pnl[idx])) if len(idx) else 0.0, days, n_boot=500)
     return {
         "rounds": n_rounds, "trades": int(len(tr)), "trade_rate": len(tr) / max(n_rounds, 1),

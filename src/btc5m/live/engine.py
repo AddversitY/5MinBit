@@ -58,10 +58,12 @@ def microprice(book) -> float:
 
 
 class Engine:
-    def __init__(self, state: MarketState = STATE, ledger: Ledger | None = None):
+    def __init__(self, state: MarketState = STATE, ledger: Ledger | None = None, record: bool = True, refresh_candles: bool = True):
         self.cfg = load_config()
+        self.record = record
+        self.refresh_candles = refresh_candles
         self.state = state
-        self.ledger = ledger or Ledger.default()
+        self.ledger = ledger or (Ledger.default() if record else None)
         self.checkpoints = [int(x) for x in self.cfg.rounds["checkpoints_s"]]
         self.candles = CandleCache()
         self.latest: dict = {}
@@ -178,7 +180,20 @@ class Engine:
 
     # ---- one step ------------------------------------------------------------------------
     def step(self, now: float | None = None) -> dict:
+        """Live step: snapshot + publish + ledger write."""
         now = now or time.time()
+        out, f = self.snapshot(now)
+        self.latest = out
+        self.series.append({"ts": now, "chainlink": out["chainlink_spot"], "twap60": out["chainlink_twap60"], "coinbase": out["coinbase_last"],
+                            "kraken": out["kraken_last"], "ptb": out["price_to_beat"], "round_start": out["round_start"], "p_up": out.get("p_up"),
+                            "pm_mid": out["market"].get("implied_p_up_mid"), "proj": out.get("projected_settlement"),
+                            "proj_lo": (out.get("projected_interval90") or [None, None])[0], "proj_hi": (out.get("projected_interval90") or [None, None])[1]})
+        if self.record:
+            self._maybe_record(out, f)
+        return out
+
+    def snapshot(self, now: float) -> tuple[dict, dict]:
+        """Pure computation of the engine output at time ``now`` from the current state."""
         t = int(now)
         S = round_start(t)
         k = t - S
@@ -224,7 +239,8 @@ class Engine:
         if kr_age is None or kr_age > 60:
             reasons.append("Kraken trade feed stale")
 
-        self.candles.refresh()
+        if self.refresh_candles:
+            self.candles.refresh()
         rv1h, rv4h, vpct = self.candles.vol_at(td)
         out: dict = {"ts": now, "round_start": S, "round_end": end, "k": k, "remaining_s": end - now, "settlement_kind": kind,
                      "twap_lookback_s": L, "price_to_beat": ptb, "price_to_beat_status": ptb_status, "model_version": self.model_version,
@@ -322,13 +338,7 @@ class Engine:
         out["explain"] = self.explain(f) if p_up is not None else []
         out["features"] = {kk: (float(v) if isinstance(v, (int, float, np.floating)) and np.isfinite(v) else None) for kk, v in f.items()}
         out["health"] = st.health_snapshot()
-        self.latest = out
-        self.series.append({"ts": now, "chainlink": out["chainlink_spot"], "twap60": out["chainlink_twap60"], "coinbase": out["coinbase_last"],
-                            "kraken": out["kraken_last"], "ptb": ptb, "round_start": S, "p_up": p_up, "pm_mid": mkt.get("implied_p_up_mid"),
-                            "proj": out.get("projected_settlement"), "proj_lo": (out.get("projected_interval90") or [None, None])[0],
-                            "proj_hi": (out.get("projected_interval90") or [None, None])[1]})
-        self._maybe_record(out, f)
-        return out
+        return out, f
 
     def _maybe_record(self, out: dict, f: dict) -> None:
         k = out["k"]
@@ -338,6 +348,8 @@ class Engine:
                 continue
             if out.get("p_up") is None:
                 continue
+            if c == 0 and out["price_to_beat_status"] != "observed" and k < 4:
+                continue  # k=0 := first instant the official price to beat is observable
             ev = out.get("expected_value_per_share_after_costs") or {}
             side = max(ev, key=ev.get) if ev else None
             would = side if side and ev[side] > self.cfg.live["min_edge_after_costs"] else None

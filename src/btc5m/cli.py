@@ -25,16 +25,20 @@ def main(argv: list[str] | None = None) -> int:
 
     sub.add_parser("collect", help="run all live collectors (writes Parquet)")
     s = sub.add_parser("build-dataset", help="build point-in-time checkpoint dataset from history")
-    s.add_argument("--source", default="kraken", choices=["kraken", "live"])
+    s.add_argument("--source", default="kraken", choices=["kraken"])
+    s.add_argument("--workers", type=int, default=None)
     s = sub.add_parser("evaluate", help="walk-forward evaluation of all models -> reports")
     s.add_argument("--quick", action="store_true")
     s = sub.add_parser("train-production", help="fit candidate model on all data; register as candidate")
     s.add_argument("--model", default="lgbm")
     s = sub.add_parser("promote", help="promote a validated candidate (requires passing gate)")
     s.add_argument("version")
+    s.add_argument("--force", action="store_true", help="override a failed gate (recorded in registry history)")
     s = sub.add_parser("serve", help="run live engine + API + dashboard")
     s.add_argument("--host", default="127.0.0.1")
     s.add_argument("--port", type=int, default=8000)
+    s = sub.add_parser("report", help="render an evaluation JSON into Markdown")
+    s.add_argument("path", nargs="?")
     sub.add_parser("verify-ledger", help="verify the paper-trading ledger hash chain")
     sub.add_parser("settle-ledger", help="attach official outcomes to ledger predictions")
     sub.add_parser("paper-report", help="evaluate live paper predictions")
@@ -69,7 +73,7 @@ def main(argv: list[str] | None = None) -> int:
     elif a.cmd == "build-dataset":
         from btc5m.features.dataset import build_dataset
 
-        build_dataset(source=a.source)
+        build_dataset(source=a.source, workers=a.workers)
     elif a.cmd == "evaluate":
         from btc5m.eval.run import run_evaluation
 
@@ -81,11 +85,16 @@ def main(argv: list[str] | None = None) -> int:
     elif a.cmd == "promote":
         from btc5m.models.registry import promote
 
-        promote(a.version)
+        promote(a.version, force=a.force)
     elif a.cmd == "serve":
         import uvicorn
 
         uvicorn.run("btc5m.api.server:app", host=a.host, port=a.port, log_level="info")
+    elif a.cmd == "report":
+        from btc5m.eval.report import render_file
+        from btc5m.models.registry import latest_report
+
+        print(render_file(a.path or latest_report()[0]))
     elif a.cmd == "verify-ledger":
         from btc5m.live.ledger import Ledger
 

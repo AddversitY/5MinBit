@@ -195,3 +195,28 @@ class Ensemble(Model):
 
     def params(self):
         return {"members": [m.name for m in self.members], "weights": None if self.w is None else [float(x) for x in self.w[0]] + [float(self.w[1])]}
+
+
+class LGBMResid(LGBM):
+    """LightGBM boosting from the Gaussian random-walk log-odds (``lp_gauss``) as base margin.
+
+    The trees only learn corrections to the parameter-free model, so with uninformative
+    features the model collapses towards it; any improvement is attributable to features."""
+
+    name = "lgbm_resid"
+
+    def __init__(self, features: list[str], params: dict | None = None, calibrate: str | None = None):
+        super().__init__([f for f in features if f != "lp_gauss"], params, calibrate)
+
+    def fit(self, train, val=None):
+        dtr = lgb.Dataset(train[self.features], train["y"], init_score=train["lp_gauss"].to_numpy())
+        if val is not None and len(val):
+            dv = lgb.Dataset(val[self.features], val["y"], init_score=val["lp_gauss"].to_numpy(), reference=dtr)
+            self.m = lgb.train(self.p, dtr, num_boost_round=2000, valid_sets=[dv], callbacks=[lgb.early_stopping(100, verbose=False)])
+        else:
+            self.m = lgb.train(self.p, dtr, num_boost_round=200)
+        return self
+
+    def predict(self, df):
+        raw = self.m.predict(df[self.features], num_iteration=getattr(self.m, "best_iteration", None) or None, raw_score=True)
+        return clip(sigmoid(df["lp_gauss"].to_numpy() + raw))

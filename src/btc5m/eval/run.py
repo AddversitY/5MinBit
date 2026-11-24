@@ -22,19 +22,25 @@ from btc5m.logging import get_logger
 from btc5m.models.base import clip, logit
 from btc5m.models.baselines import Coin, Constant, GaussianRW, MonteCarloBootstrap, PlattVol, standardized_returns
 from btc5m.models.hmm import RegimeHMM, attach_regimes
-from btc5m.models.ml import LGBM, XGB, Ensemble, LogReg
+from btc5m.models.ml import LGBM, XGB, Ensemble, LGBMResid, LogReg
 from btc5m.rules import TWAP60, FeeSchedule
 from btc5m.storage.store import data_dir
 
 log = get_logger("eval")
 HMM_FEATURES = ["hmm_p0", "hmm_p1", "hmm_p2", "hmm_vol"]
+# Bootstrap block length: rounds are resampled in contiguous 4-hour blocks, which preserves
+# short-range dependence (volatility clustering) while giving enough blocks for stable CIs.
+BLOCK_S = 4 * 3600
 
 
 def load_dataset(path: Path | None = None) -> pd.DataFrame:
     path = path or data_dir() / "datasets" / "checkpoints_kraken.parquet"
     df = pd.read_parquet(path)
     df = df[np.isfinite(df["z"]) & np.isfinite(df["sigma"]) & (df["sigma"] > 0)].copy()
-    df["day"] = df["start"] // 86400
+    if "lp_gauss" not in df:
+        p = df["p_gauss"].clip(1e-4, 1 - 1e-4)
+        df["lp_gauss"] = np.log(p / (1 - p))
+    df["day"] = df["start"] // BLOCK_S  # bootstrap block id (4 h), see BLOCK_S
     return df.sort_values(["start", "k"]).reset_index(drop=True)
 
 
@@ -55,8 +61,11 @@ def model_factory(std_ret: np.ndarray | None, quick: bool = False) -> dict:
         "logreg": lambda: LogReg(core),
         "logreg_hmm": lambda: LogReg(core_h),
         "lightgbm": lambda: LGBM(core_h),
+        "lgbm_resid": lambda: LGBMResid(core_h),
         "xgboost": lambda: XGB(core_h),
-        "ensemble": lambda: Ensemble([PlattVol(), LogReg(core_h), LGBM(core_h)]),
+        # equal-weight log-odds average: stacking weights fitted on the validation block were
+        # biased because LogReg refits on train+val (in-sample val predictions)
+        "ensemble": lambda: Ensemble([PlattVol(), LogReg(core_h), LGBMResid(core_h)], stack=False),
     }
     if std_ret is not None:
         models["monte_carlo"] = lambda: MonteCarloBootstrap(std_ret, n_paths=5000 if quick else 20000)
@@ -94,8 +103,9 @@ def run_walk_forward(df: pd.DataFrame, quick: bool = False, min_train_days: floa
             t1 = time.time()
             m = fac[name]().fit(tr, va)
             out[f"p_{name}"] = m.predict(te)
-            if name == "lightgbm":
-                importances.append(m.importance())
+            if name in ("lightgbm", "lgbm_resid"):
+                if name == "lightgbm":
+                    importances.append(m.importance())
                 ptr = m.predict(tr)
                 train_perf.append({"fold": fold.i, "model": name, **{k: v for k, v in M.summary(ptr, tr["y"].to_numpy()).items() if k in ("n", "accuracy", "brier", "logloss")}})
             if name == "logreg":
@@ -202,7 +212,12 @@ def trading_eval(P: pd.DataFrame, model_cols: list[str]) -> dict:
 
 
 def ablation(df: pd.DataFrame, bars=None, mret=None, n_folds: int = 4) -> dict:
-    """Drop-one-group and only-distance+group LightGBM on the last n folds."""
+    """Feature-group value measured as improvement over the Gaussian base margin.
+
+    Uses the residual LightGBM (boosting from the Gaussian log-odds), so ``gaussian_only`` is
+    the zero-feature reference, ``dist+<group>`` adds one group to the distance/time features,
+    and ``drop_<group>`` removes one group from the full set. Last ``n_folds`` walk-forward folds.
+    """
     folds = walk_forward(df["start"].to_numpy())[-n_folds:]
     mret = mret if mret is not None else minute_returns()
     base_feats = CORE_FEATURES + HMM_FEATURES
@@ -214,16 +229,18 @@ def ablation(df: pd.DataFrame, bars=None, mret=None, n_folds: int = 4) -> dict:
         if gname not in ("distance", "time"):
             variants[f"dist+{gname}"] = sorted(set(FEATURE_GROUPS["distance"] + FEATURE_GROUPS["time"] + cols))
     variants["dist_only"] = FEATURE_GROUPS["distance"] + FEATURE_GROUPS["time"]
-    res = {v: [] for v in variants}
+    res = {v: [] for v in list(variants) + ["gaussian_only"]}
     for fold in folds:
         hmm = RegimeHMM().fit(mret[(mret.index >= int(fold.train_starts.min()) - 7 * 86400) & (mret.index < int(fold.val_starts.max()) + 300)])
         d = attach_regimes(df[df["start"] <= fold.test_starts.max()], hmm.filter(mret))
         tr, va, te = take(d, fold.train_starts), take(d, fold.val_starts), take(d, fold.test_starts)
+        early = te["k"].to_numpy() <= 60
+        y = te["y"].to_numpy()
+        preds = {"gaussian_only": GaussianRW().predict(te)}
         for v, feats in variants.items():
-            m = LGBM(feats).fit(tr, va)
-            p = m.predict(te)
-            res[v].append({"fold": fold.i, "n": len(te), "logloss": M.logloss(p, te["y"]), "brier": M.brier(p, te["y"]),
-                           "early_logloss": M.logloss(p[te["k"].to_numpy() <= 60], te["y"].to_numpy()[te["k"].to_numpy() <= 60])})
+            preds[v] = LGBMResid(feats).fit(tr, va).predict(te)
+        for v, p in preds.items():
+            res[v].append({"fold": fold.i, "n": len(te), "logloss": M.logloss(p, y), "brier": M.brier(p, y), "early_logloss": M.logloss(p[early], y[early])})
     summ = {}
     for v, rows in res.items():
         if rows:
@@ -281,7 +298,7 @@ def run_evaluation(quick: bool = False, dataset: Path | None = None) -> Path:
         "era_gaussian": era_comparison(df_all),
         "metrics": evaluate_predictions(P, model_cols),
         "training_performance": train_perf,
-        "trading": trading_eval(P, ["p_gaussian_rw", "p_vol_platt", "p_logreg", "p_lightgbm", "p_ensemble"]),
+        "trading": trading_eval(P, ["p_gaussian_rw", "p_vol_platt", "p_logreg", "p_lightgbm", "p_lgbm_resid", "p_ensemble"]),
     }
     if imps:
         keys = set().union(*imps)
