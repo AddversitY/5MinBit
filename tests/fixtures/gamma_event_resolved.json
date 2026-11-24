@@ -1,0 +1,48 @@
+{
+ "id": "1446006",
+ "slug": "btc-updown-5m-1795493700",
+ "title": "Bitcoin Up or Down - November 23, 11:15PM-11:20PM ET",
+ "resolutionSource": "https://data.chain.link/streams/btc-usd-twap-60s-streams",
+ "startTime": "2026-11-24T04:15:00Z",
+ "endDate": "2026-11-24T04:20:00Z",
+ "closed": true,
+ "eventMetadata": {
+  "finalPrice": 60392.43131499456,
+  "priceToBeat": 60335.046536988404
+ },
+ "markets": [
+  {
+   "id": "7278869",
+   "question": "Bitcoin Up or Down - November 23, 11:15PM-11:20PM ET",
+   "conditionId": "0x8909d99db2ce2cd416b2baea219be8cf94f196cef1373e83a1dd248288e7e343",
+   "slug": "btc-updown-5m-1795493700",
+   "resolutionSource": "https://data.chain.link/streams/btc-usd-twap-60s-streams",
+   "endDate": "2026-11-24T04:20:00Z",
+   "outcomes": "[\"Up\", \"Down\"]",
+   "outcomePrices": "[\"1\", \"0\"]",
+   "closed": true,
+   "closedTime": "2026-11-24 04:20:23+00",
+   "clobTokenIds": "[\"34628613372475197150331289983925366819622996276165871384207566597903336592803\", \"92457139463426914953984961822001034257941013031889033387736767017459776599855\"]",
+   "volume": "41772.73353200005",
+   "feeSchedule": {
+    "exponent": 1,
+    "rate": 0.05,
+    "takerOnly": true,
+    "rebateRate": 0.2
+   },
+   "cryptoMarketConfig": {
+    "id": "btc-5m-twap-60",
+    "asset": "btc",
+    "duration": "5m",
+    "twapEnabled": true,
+    "twapLookbackSeconds": 60
+   },
+   "cryptoMarketConfigId": "btc-5m-twap-60",
+   "orderPriceMinTickSize": 0.001,
+   "createdAt": "2026-11-23T04:21:29.937045Z",
+   "acceptingOrdersTimestamp": "2026-11-23T04:21:37Z",
+   "umaResolutionStatus": "resolved",
+   "feesEnabled": true
+  }
+ ]
+}

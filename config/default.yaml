@@ -1,0 +1,84 @@
+# btc5m default configuration. Override with config/local.yaml or BTC5M_CONFIG=<path>.
+# Every endpoint below was verified against official docs / live responses on 2026-11-24
+# (see DATA_SOURCES.md). Nothing here places orders: the system is read-only.
+
+mode: paper            # only "paper" is supported. There is no live-trading code path.
+
+paths:
+  data_dir: data
+  duckdb: data/btc5m.duckdb
+  ledger: data/ledger/predictions.jsonl
+  models_dir: data/models
+  reports_dir: data/reports
+
+polymarket:
+  gamma_url: https://gamma-api.polymarket.com
+  clob_url: https://clob.polymarket.com
+  data_api_url: https://data-api.polymarket.com
+  market_ws: wss://ws-subscriptions-clob.polymarket.com/ws/market
+  # Legacy public Real-Time Data Socket. Deprecated in favour of PolyBolt, but still
+  # serves public Chainlink BTC/USD spot + 60s TWAP as of 2026-11-24.
+  rtds_ws: wss://ws-live-data.polymarket.com
+  # PolyBolt requires CLOB API credentials + a Chainlink API key. Disabled unless you
+  # provide them via environment variables (never a private key; see DATA_SOURCES.md).
+  polybolt_ws: wss://ws-live-v2.polymarket.com/ws
+  polybolt_enabled: false
+  series_slug: btc-up-or-down-5m
+  slug_prefix: btc-updown-5m-
+
+exchanges:
+  coinbase:
+    enabled: true
+    ws: wss://ws-feed.exchange.coinbase.com
+    rest: https://api.exchange.coinbase.com
+    product: BTC-USD
+  kraken:
+    enabled: true
+    ws: wss://ws.kraken.com/v2
+    rest: https://api.kraken.com
+    symbol: BTC/USD
+    rest_pair: XBTUSD
+  binance:
+    # api.binance.com / fapi.binance.com return HTTP 451 (unavailable for legal reasons)
+    # from the development environment. Enable ONLY where Binance permits access.
+    enabled: false
+    ws_spot: wss://stream.binance.com:9443/stream
+    ws_futures: wss://fstream.binance.com/stream
+    symbol: btcusdt
+
+collector:
+  flush_seconds: 10          # parquet flush cadence for live data
+  book_depth_levels: 10      # levels kept in book snapshots
+  book_snapshot_ms: 1000     # cadence of book snapshot rows
+  stale_after_s:
+    chainlink: 5
+    coinbase: 5
+    kraken: 10
+    polymarket_book: 15
+
+rounds:
+  seconds: 300
+  checkpoints_s: [0, 15, 30, 45, 60, 90, 120, 180, 240]
+
+costs:
+  # Current documented taker fee for BTC 5m/15m up/down: fee = C * rate * p * (1-p)
+  taker_fee_rate: 0.05
+  fee_exponent: 1
+  extra_slippage_ticks: 1     # added on top of the reconstructed/observed spread
+  tick: 0.01
+  latency_s: 2                # assumed decision->fill latency in backtests
+
+live:
+  predict_every_s: 1
+  model: production           # registry alias
+  min_edge_after_costs: 0.0   # only used for hypothetical paper "would-trade" flags
+  max_feed_staleness_s: 5
+  # validated envelope: outside these, the dashboard shows INSUFFICIENT EVIDENCE
+  max_abs_z: 6.0
+  max_vol_percentile: 0.99
+
+backfill:
+  rounds_days: 120
+  kraken_days: 100
+  coinbase_candle_days: 120
+  pm_trades_days: 45
