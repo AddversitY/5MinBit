@@ -1,2 +1,0 @@
-[console_scripts]
-btc5m = btc5m.cli:main

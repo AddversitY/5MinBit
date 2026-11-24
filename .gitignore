@@ -10,3 +10,5 @@ node_modules/
 dashboard/dist/
 .env
 *.log
+*.egg-info/
+*.tsbuildinfo
