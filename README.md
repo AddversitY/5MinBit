@@ -7,10 +7,14 @@ especially in the first 15–60 seconds of each round.
 > **Read-only by design.** No wallet, no private keys, no order placement. `mode: paper` is
 > enforced in code. All trading figures are hypothetical. Nothing here is investment advice.
 
-**Current conclusion (details in [MODEL_RESULTS.md](MODEL_RESULTS.md)):** see the "Bottom
-line" section of MODEL_RESULTS.md. In short, early-round outcomes are predictable from public
-information (mostly the TWAP geometry), but Polymarket prices already reflect it. No model
-has passed the validation gate, and no edge after costs has been demonstrated.
+**Current conclusion** (walk-forward on 20,891 unseen rounds; details in
+[MODEL_RESULTS.md](MODEL_RESULTS.md)): **no edge that survives costs was found.** Early-round
+outcomes are predictable from public information (56.8% correct at the open, 68.6% at 60 s),
+mostly because of the TWAP settlement geometry. But Polymarket's own price is more accurate
+than every model at every checkpoint, machine learning adds ≈ 0.2% over a parameter-free
+model, no model passes the promotion gate, and every hypothetical taker strategy loses
+1.5–4.5 ¢ per share after fees and spread. The live paper test continues to check this on
+rounds no model has seen.
 
 ## Documents
 

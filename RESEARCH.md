@@ -164,10 +164,12 @@ Intra-round Chainlink paths are not available historically, so the reference pri
 reconstructed as `ref[s] = kraken_close[s] + basis`, with
 `basis = priceToBeat − mean(kraken_close over [start−60, start))`. This uses only the official
 price to beat and pre-start exchange data, so it adds no look-ahead. Quality is measured on
-every round by reconstructing the official `finalPrice` and the outcome. In the first 859
-rounds it **reproduced the official outcome in 98.95% of rounds** (final-price error sd ≈
-$4.6). Full-sample figures are in MODEL_RESULTS.md. The ~1% of rounds where the proxy
-disagrees are near-ties, which are inherently unpredictable at early checkpoints anyway.
+every round by reconstructing the official `finalPrice` and the outcome. Over all 26,412
+TWAP-60 rounds from 2026-08-21 to 2026-11-23 it **reproduced the official outcome in 97.5% of
+rounds** (final-price error: mean |e| $3.72, sd $5.66, p95 $10.11; daily agreement 89–100%,
+lowest on quiet days with many near-ties). The first 859 rounds had given 98.95%. The rounds
+where the proxy disagrees are near-ties, which are inherently unpredictable at early
+checkpoints anyway, and the models are always scored against the official outcome.
 
 Live, the engine uses the real Chainlink stream and also logs a proxy-based prediction for
 every ledger record, so any train/serve skew can be measured on unseen rounds.
@@ -260,7 +262,11 @@ rounds.
 
 H4. Any such edge survives fees, spread, latency and slippage.
 
-Results are in [MODEL_RESULTS.md](MODEL_RESULTS.md). Live-only hypotheses (order-book
+**Verdicts** (walk-forward, 20,891 unseen rounds; [MODEL_RESULTS.md](MODEL_RESULTS.md)):
+H1 **yes** (56.8% correct at the open, 68.6% at 60 s); H2 **barely** (≈ 0.2% of log loss,
+significant only at 0 s and 15 s); H3 **no** (the market mid is more accurate at every
+checkpoint); H4 **no** (every hypothetical taker strategy loses after fees and spread).
+Live-only hypotheses (order-book
 imbalance, the gap between exchanges and the lagging Chainlink stream, futures basis,
 liquidations) are logged on every ledger record and need the live paper test for a verdict;
 no historical data exists for them.

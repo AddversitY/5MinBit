@@ -23,22 +23,24 @@ Status key: ✅ done · 🟡 in progress / partial · ⬜ not started
 
 ## Phase 4 — Advanced models ✅
 - ✅ Logistic regression (per checkpoint), LightGBM, XGBoost, causal HMM regimes, stacking ensemble, market-stacking test
-- ⬜ LSTM/GRU: **not justified so far.** Gradient boosting does not beat the parameter-free model, so the extra non-linear capacity of a sequence net is not supported by the evidence (see MODEL_RESULTS.md). Revisit only if live-only order-book features show signal
+- ⬜ LSTM/GRU: **not justified.** On 20,891 out-of-sample rounds, all features beyond the volatility-adjusted distance are worth ≈ 0.2% of log loss and plain LightGBM overfits at the open, so the extra capacity of a sequence net is not supported by the evidence (MODEL_RESULTS.md). Revisit only if live-only order-book features show signal
 
 ## Phase 5 — Walk-forward & calibration ✅
 - ✅ Expanding-window walk-forward with purge; validation-only calibration; block-bootstrap CIs; vol-regime breakdown; ablations; cost-aware hypothetical backtest; stress tests
-- 🟡 Re-run on the full TWAP-60 era once the Kraken backfill completes
+- ✅ Full run on the TWAP-60 era (26,412 rounds, 11 folds, 20,891 OOS rounds; 2026-11-24). No model passes the gate; market more accurate than all models; all taker strategies lose
+- ⬜ Extend history back over the spot and TWAP-30 eras (Kraken backfill continues) and compare eras
 
 ## Phase 6 — Dashboard ✅
 - ✅ FastAPI + WebSocket; React/TS dashboard with verified vs model labelling, INSUFFICIENT EVIDENCE gating, live chart, feed health, influential variables, performance panels
 
 ## Phase 7 — Live paper testing 🟡
 - ✅ Hash-chained ledger, automatic settlement from official outcomes, paper report, drift monitor
-- 🟡 Accumulate ≥ 1,000 unseen live rounds (~3.5 days of continuous running). **Started 2026-11-24**; needs a persistent host (the development container is ephemeral)
+- 🟡 Accumulate ≥ 1,000 unseen live rounds (~3.5 days of continuous running). **Running on the owner's Windows desktop since 2026-11-24** (`scripts/windows/`); the development container is ephemeral
 - ⬜ Build a live-capture dataset (`raw/live/*`) and evaluate live-only features (book imbalance, micro-price, exchange−Chainlink lag gap, futures basis, liquidations, Polymarket book) with walk-forward once ≥ 2,000 rounds exist
 
 ## Phase 8 — Review & reliability 🟡
 - ✅ Dockerfile, docker-compose (log rotation) and systemd unit (`deploy/btc5m.service`); hourly compaction of live Parquet files
+- ✅ Windows runner (no admin rights) tested in CI on `windows-latest`; one server per ledger enforced
 - ⬜ Anchor the ledger head hash externally (e.g. periodic signed commit) for third-party verifiability
 - ⬜ Maker-side (liquidity provision) study: makers pay no fee and earn rebates. This is structurally more promising than taking, but needs queue-position and adverse-selection modelling from live book data
 - ⬜ Monthly re-validation; promote only through the gate

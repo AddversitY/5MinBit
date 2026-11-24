@@ -165,11 +165,14 @@ def evaluate_predictions(P: pd.DataFrame, model_cols: list[str]) -> dict:
                 dh = h["day"].to_numpy()
                 r = {"n": int(len(h)), "market": M.summary(mk, yh)}
                 for m in model_cols + (["p_stack_mkt"] if "p_stack_mkt" in h.columns else []):
-                    pm = h[m].to_numpy()
-                    if not np.isfinite(pm).all():
+                    # p_stack_mkt is undefined in folds whose validation window had too few market
+                    # prices; compare it with the market on the rows where it exists.
+                    ok = np.isfinite(h[m].to_numpy())
+                    if ok.sum() < 200:
                         continue
-                    pt, lo, hi = M.day_block_bootstrap(lambda idx: M.brier(pm[idx], yh[idx]) - M.brier(mk[idx], yh[idx]), dh, n_boot=400)
-                    r[m] = {**M.summary(pm, yh), "d_brier_vs_market": pt, "ci95": [lo, hi]}
+                    pm, ym, mm, dm = h[m].to_numpy()[ok], yh[ok], mk[ok], dh[ok]
+                    pt, lo, hi = M.day_block_bootstrap(lambda idx: M.brier(pm[idx], ym[idx]) - M.brier(mm[idx], ym[idx]), dm, n_boot=400)
+                    r[m] = {**M.summary(pm, ym), "d_brier_vs_market": pt, "ci95": [lo, hi], "n_rows": int(ok.sum())}
                 res["vs_market"][int(k)] = r
         for m in ("p_gaussian_rw", "p_lightgbm", "p_ensemble", "p_vol_platt"):
             if m in g.columns:

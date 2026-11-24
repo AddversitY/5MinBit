@@ -93,6 +93,17 @@ Chronological log of work, findings and decisions. Times are UTC.
 * Settlement re-verified on ~4 h of recorded streams: price to beat = TWAP-60 at the start
   second on 45/45 rounds, final = TWAP-60 at the end second on 44/44.
 
+### Phase 5: full walk-forward run (09:18–10:05)
+* Backfills done: Kraken ticks 2026-08-21 → 11-23 (95 days, 11.9M trades; still extending
+  backwards), Polymarket taker trades for 45 days (19.9M rows, 12,928 markets).
+* Dataset: 26,412 TWAP-60 rounds × 9 checkpoints (237,708 rows) in 2.5 min. Walk-forward:
+  11 folds, 20,891 out-of-sample rounds, 36 min.
+* Result (MODEL_RESULTS.md): H1 yes, H2 barely, H3 no, H4 no. Market mid more accurate than
+  every model at every checkpoint; all 189 hypothetical taker cells lose after costs; no model
+  passes the promotion gate (best: ensemble, 2 of the 3 required early checkpoints).
+* Reporting bug found and fixed: the market-stack model was skipped in the market comparison
+  when undefined in some folds; metrics recomputed from the saved predictions (unchanged).
+
 ### Open items
-* Full walk-forward run on ≥ 45 days (then MODEL_RESULTS.md).
-* 1,000-round live paper milestone (~3.5 days of uptime; this container is ephemeral).
+* 1,000-round live paper milestone (~3.5 days): running on the owner's desktop.
+* Extend history over the spot and TWAP-30 eras; maker-side (liquidity provision) study.
