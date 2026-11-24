@@ -186,6 +186,51 @@ def evaluate_predictions(P: pd.DataFrame, model_cols: list[str]) -> dict:
     return res
 
 
+def encompassing_test(P: pd.DataFrame, model_cols: list[str], n_boot: int = 300) -> dict:
+    """Forecast-encompassing test vs the market, per checkpoint.
+
+    Logistic regression y ~ a + b1*logit(market) + b2*(logit(model) - logit(market)).
+    b2 > 0 with a CI excluding 0 means the model carries information NOT already in the
+    market price (a necessary, not sufficient, condition for a trading edge). b1 ~ 1 and
+    b2 ~ 0 means the market encompasses the model. CI: 4-hour-block bootstrap.
+    """
+    from sklearn.linear_model import LogisticRegression
+
+    out = {}
+    if "pm_mid" not in P.columns:
+        return out
+    for k, g in P.groupby("k"):
+        h = g[np.isfinite(g["pm_mid"])]
+        if len(h) < 300:
+            continue
+        y = h["y"].to_numpy()
+        lm = logit(h["pm_mid"].clip(0.01, 0.99).to_numpy())
+        blocks = h["day"].to_numpy()
+        res = {"n": int(len(h))}
+        for m in model_cols:
+            gap = logit(h[m].to_numpy()) - lm
+            X = np.column_stack([lm, gap])
+
+            def fit(idx):
+                lr = LogisticRegression(C=1e4, max_iter=2000).fit(X[idx], y[idx])
+                return lr.coef_[0]
+
+            b = fit(np.arange(len(y)))
+            rng = np.random.default_rng(1)
+            uniq, inv = np.unique(blocks, return_inverse=True)
+            members = [np.where(inv == j)[0] for j in range(len(uniq))]
+            boots = []
+            for _ in range(n_boot):
+                idx = np.concatenate([members[j] for j in rng.integers(0, len(uniq), len(uniq))])
+                boots.append(fit(idx))
+            boots = np.array(boots)
+            lo, hi = np.quantile(boots, [0.025, 0.975], axis=0)
+            res[m] = {"b_market": float(b[0]), "b_market_ci": [float(lo[0]), float(hi[0])], "b_gap": float(b[1]), "b_gap_ci": [float(lo[1]), float(hi[1])],
+                      "model_adds_info": bool(lo[1] > 0)}
+        out[int(k)] = res
+    return out
+
+
 def trading_eval(P: pd.DataFrame, model_cols: list[str]) -> dict:
     out = {}
     if "fill_up_l2" not in P.columns:
@@ -298,6 +343,7 @@ def run_evaluation(quick: bool = False, dataset: Path | None = None) -> Path:
         "era_gaussian": era_comparison(df_all),
         "metrics": evaluate_predictions(P, model_cols),
         "training_performance": train_perf,
+        "encompassing": encompassing_test(P, [c for c in ("p_gaussian_rw", "p_vol_platt", "p_logreg", "p_lgbm_resid", "p_ensemble") if c in P.columns]),
         "trading": trading_eval(P, ["p_gaussian_rw", "p_vol_platt", "p_logreg", "p_lightgbm", "p_lgbm_resid", "p_ensemble"]),
     }
     if imps:

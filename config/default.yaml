@@ -47,7 +47,7 @@ exchanges:
     symbol: btcusdt
 
 collector:
-  flush_seconds: 10          # parquet flush cadence for live data
+  flush_seconds: 60          # parquet flush cadence for live data (compact daily with `btc5m compact`)
   book_depth_levels: 10      # levels kept in book snapshots
   book_snapshot_ms: 1000     # cadence of book snapshot rows
   stale_after_s:

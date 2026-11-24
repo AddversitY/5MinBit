@@ -38,7 +38,7 @@ def _book(row) -> Book:
     return Book(bids=bids, asks=asks, ts=row["ts"], rx=row["rx"])
 
 
-def build_live_dataset(out_path=None) -> pd.DataFrame:
+def build_live_dataset(out_path=None, every_s: int | None = None) -> pd.DataFrame:
     cfg = load_config()
     cps = [int(c) for c in cfg.rounds["checkpoints_s"]]
     ev = []  # (rx, kind, row)
@@ -67,6 +67,8 @@ def build_live_dataset(out_path=None) -> pd.DataFrame:
     t_hi = int(events["rx"].max())
     # k=0 is defined as the instant the price to beat is observable (~1.6 s after the open)
     checkpoints = sorted(s + c + (2 if c == 0 else 0) for s in range((t_lo // 300 + 1) * 300, t_hi - 300, 300) for c in cps)
+    if every_s:  # dense evaluation grid (for seconds-scale efficiency studies)
+        checkpoints = list(range((t_lo // 300 + 1) * 300 + 2, t_hi - 2, every_s))
     st = MarketState()
     eng = Engine(st, record=False, refresh_candles=False)
     from btc5m.live.candles import CandleCache
@@ -115,7 +117,7 @@ def build_live_dataset(out_path=None) -> pd.DataFrame:
         S = out["round_start"]
         if S not in res.index or not bool(res.loc[S, "resolved"]) or out.get("p_up") is None:
             continue
-        row = {"start": S, "k": float(max(c for c in cps if c <= T - S)), "t_eval": T, "y": int(res.loc[S, "outcome_up"]), "p_engine": out["p_up"], "status": out["status"], "data_status": out["data_status"],
+        row = {"start": S, "k": float(max(c for c in cps if c <= T - S)) if not every_s else float(T - S), "t_eval": T, "y": int(res.loc[S, "outcome_up"]), "p_engine": out["p_up"], "status": out["status"], "data_status": out["data_status"],
                "ptb_status": out["price_to_beat_status"], "ptb_err": (out["price_to_beat"] - res.loc[S, "price_to_beat"]) if out["price_to_beat"] else np.nan}
         row.update({kk: v for kk, v in feats.items() if isinstance(v, (int, float, np.floating))})
         m = out["market"]

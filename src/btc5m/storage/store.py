@@ -102,3 +102,30 @@ def query_df(sql: str, params: list | None = None):
         return con.execute(sql, params or []).df()
     finally:
         con.close()
+
+
+def compact(min_age_s: float = 3600.0) -> dict:
+    """Merge each live stream's small Parquet files per day into one file.
+
+    Only files older than ``min_age_s`` are merged (the writer may still be appending to the
+    current period). The merged file is written atomically before the originals are removed,
+    so readers can briefly see duplicates but never lose rows.
+    """
+    import glob as _glob
+
+    out = {}
+    now = time.time()
+    root = data_dir() / "raw" / "live"
+    for day_dir in sorted(root.glob("*/date=*")):
+        files = [Path(f) for f in _glob.glob(str(day_dir / "*.parquet")) if not Path(f).name.startswith("compact-")]
+        files = [f for f in files if now - f.stat().st_mtime > min_age_s]
+        if len(files) < 2:
+            continue
+        tables = [pq.read_table(f) for f in files]
+        merged = pa.concat_tables(tables, promote_options="default")
+        target = day_dir / f"compact-{int(now)}-{os.getpid()}.parquet"
+        write_parquet_atomic(merged, target)
+        for f in files:
+            f.unlink()
+        out[str(day_dir.relative_to(root))] = {"files": len(files), "rows": merged.num_rows}
+    return out

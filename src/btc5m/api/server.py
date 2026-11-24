@@ -69,6 +69,19 @@ async def lifespan(app: FastAPI):
                 MONITOR.observe(ENGINE.latest["features"])
 
     _tasks.append(asyncio.create_task(feed_monitor()))
+
+    async def hourly_compaction():
+        from btc5m.storage.store import compact
+
+        while True:
+            await asyncio.sleep(3600)
+            try:
+                await asyncio.to_thread(compact, 3600.0)
+            except Exception as e:
+                log.warning("compaction_failed", err=repr(e))
+
+    if persist:
+        _tasks.append(asyncio.create_task(hourly_compaction()))
     yield
     for t in _tasks:
         t.cancel()

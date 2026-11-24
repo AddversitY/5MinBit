@@ -14,7 +14,7 @@ Status key: ✅ done · 🟡 in progress / partial · ⬜ not started
 - ✅ Backfills: Gamma rounds (80k), Coinbase 1m candles (280 d)
 - 🟡 Kraken tick backfill (newest-first, ~3.6 min/day of history; extends while the process runs)
 - 🟡 Polymarket taker trades (45 days)
-- ⬜ PolyBolt client (authenticated; needs user-supplied CLOB API creds + Chainlink key). Required before RTDS price topics are removed
+- 🟡 PolyBolt client implemented (`collectors/polymarket_polybolt.py`, env-var credentials, redundant with RTDS); tested on documented frames only. Needs a live test with user-supplied CLOB API creds and a Chainlink key before RTDS price topics are removed
 - ⬜ Optional importer for the gated `polydata5/polymarket-updown-5m-ws` dataset (user HF token) to evaluate book and Chainlink-lag features historically
 
 ## Phase 3 — Features & baselines ✅
@@ -37,8 +37,8 @@ Status key: ✅ done · 🟡 in progress / partial · ⬜ not started
 - 🟡 Accumulate ≥ 1,000 unseen live rounds (~3.5 days of continuous running). **Started 2026-11-24**; needs a persistent host (the development container is ephemeral)
 - ⬜ Build a live-capture dataset (`raw/live/*`) and evaluate live-only features (book imbalance, micro-price, exchange−Chainlink lag gap, futures basis, liquidations, Polymarket book) with walk-forward once ≥ 2,000 rounds exist
 
-## Phase 8 — Review & reliability ⬜
-- ⬜ Run the server under a supervisor (systemd/docker) with log rotation and disk quotas
+## Phase 8 — Review & reliability 🟡
+- ✅ Dockerfile, docker-compose (log rotation) and systemd unit (`deploy/btc5m.service`); hourly compaction of live Parquet files
 - ⬜ Anchor the ledger head hash externally (e.g. periodic signed commit) for third-party verifiability
 - ⬜ Maker-side (liquidity provision) study: makers pay no fee and earn rebates. This is structurally more promising than taking, but needs queue-position and adverse-selection modelling from live book data
 - ⬜ Monthly re-validation; promote only through the gate

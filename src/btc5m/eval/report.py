@@ -85,6 +85,23 @@ def render(rep: dict) -> str:
         a("|---|---:|---:|" + "---|" * len(mcols))
         for k, row in vm.items():
             a(f"| {k} | {row['n']:,} | {_f(row['market']['brier'])} | " + " | ".join(_ci(row.get(c)) for c in mcols) + " |")
+    enc = rep.get("encompassing") or {}
+    if enc:
+        a("")
+        a("### Forecast-encompassing test: does the model contain information the market price lacks?")
+        a("")
+        a("Logistic regression `y ~ b1·logit(market) + b2·(logit(model) − logit(market))`. b2 > 0 with a 95% CI above 0 (✓) means the model adds information beyond the market price; b2 ≈ 0 means the market encompasses the model.")
+        a("")
+        ecols = [c for c in ("p_gaussian_rw", "p_vol_platt", "p_logreg", "p_lgbm_resid", "p_ensemble") if c in next(iter(enc.values()))]
+        a("| k (s) | n | b1 market | " + " | ".join(f"b2 {c[2:]} [95% CI]" for c in ecols) + " |")
+        a("|---|---:|---:|" + "---|" * len(ecols))
+        for k, r in enc.items():
+            b1 = r[ecols[0]]["b_market"]
+            cells = []
+            for c in ecols:
+                v = r[c]
+                cells.append(f"{v['b_gap']:+.3f} [{v['b_gap_ci'][0]:+.3f}, {v['b_gap_ci'][1]:+.3f}]" + (" ✓" if v["model_adds_info"] else ""))
+            a(f"| {k} | {r['n']:,} | {b1:.3f} | " + " | ".join(cells) + " |")
     vr = rep["metrics"].get("by_vol_regime") or {}
     if vr:
         a("")

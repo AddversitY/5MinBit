@@ -24,6 +24,8 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--days", type=float, default=cfg.backfill["pm_trades_days"])
 
     sub.add_parser("collect", help="run all live collectors (writes Parquet)")
+    s = sub.add_parser("compact", help="merge small live Parquet files per stream/day")
+    s.add_argument("--min-age", type=float, default=3600.0)
     s = sub.add_parser("build-dataset", help="build point-in-time checkpoint dataset from history")
     s.add_argument("--source", default="kraken", choices=["kraken"])
     s.add_argument("--workers", type=int, default=None)
@@ -70,6 +72,11 @@ def main(argv: list[str] | None = None) -> int:
         from btc5m.collectors.runner import run_collectors
 
         asyncio.run(run_collectors())
+    elif a.cmd == "compact":
+        from btc5m.storage.store import compact
+
+        res = compact(a.min_age)
+        print(f"compacted {len(res)} stream-days: {res}")
     elif a.cmd == "build-dataset":
         from btc5m.features.dataset import build_dataset
 

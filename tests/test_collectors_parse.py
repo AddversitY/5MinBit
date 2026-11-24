@@ -61,3 +61,20 @@ def test_second_bars_window_excludes_current_second():
     w = sb.window(1001, 3)  # seconds 998, 999, 1000
     assert np.isnan(w["close"][0]) and w["close"][-1] == 10.0
     assert w["sell"].sum() == 0.0
+
+
+def test_polybolt_documented_frames():
+    from btc5m.collectors.polymarket_polybolt import PolyBoltCollector
+
+    st = MarketState()
+    c = PolyBoltCollector(st)
+    snap = {"v": 1, "channel": "price.crypto", "seq": 1, "ts": 1788973000000, "snapshot": True,
+            "payload": {"symbol": "btcusd", "source": "chainlink", "data": [{"timestamp": 1788972880000, "value": 64123.5, "full_accuracy_value": "64123.50000000"}]}}
+    live = {"v": 1, "channel": "price.crypto.twap", "seq": 3, "ts": 1788973002000,
+            "payload": {"symbol": "btcusd", "value": 64120.7, "full_accuracy_value": "64120.70000000", "timestamp": 1788973002000, "window_seconds": 60, "source": "chainlink"}}
+    other = {"v": 1, "channel": "price.crypto", "seq": 4, "ts": 1788973003000, "payload": {"symbol": "btcusd", "value": 1.0, "timestamp": 1788973003000, "source": "pyth"}}
+    c.handle(json.dumps(snap), 1788973000.5)
+    c.handle(json.dumps(live), 1788973003.5)
+    c.handle(json.dumps(other), 1788973004.0)
+    assert st.chainlink_spot.last()[2] == 64123.5  # pyth fallback ignored
+    assert st.chainlink_twap.last()[2] == 64120.7
