@@ -1,0 +1,18 @@
+services:
+  btc5m:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8000:8000"   # dashboard on localhost only
+    volumes:
+      - ./data:/app/data
+    environment:
+      BTC5M_PERSIST: "1"
+      # Optional PolyBolt (RTDS successor). Never put a wallet private key here.
+      # BTC5M_CLOB_API_KEY: ""
+      # BTC5M_CLOB_API_SECRET: ""
+      # BTC5M_CLOB_API_PASSPHRASE: ""
+      # BTC5M_CHAINLINK_API_KEY: ""
+    logging:
+      driver: json-file
+      options: { max-size: "50m", max-file: "5" }

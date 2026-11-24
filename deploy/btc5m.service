@@ -1,0 +1,22 @@
+# systemd unit for continuous paper testing (adjust paths/user).
+# Install: sudo cp deploy/btc5m.service /etc/systemd/system/ && sudo systemctl enable --now btc5m
+[Unit]
+Description=btc5m paper-testing engine (read-only)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=btc5m
+WorkingDirectory=/opt/5MinBit
+Environment=BTC5M_PERSIST=1
+ExecStart=/opt/5MinBit/.venv/bin/btc5m serve --host 127.0.0.1 --port 8000
+Restart=always
+RestartSec=5
+# raw live capture grows ~1-2 GB/day; monitor disk
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/opt/5MinBit/data
+
+[Install]
+WantedBy=multi-user.target
