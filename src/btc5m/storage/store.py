@@ -141,12 +141,12 @@ def compact(min_age_s: float = 3600.0) -> dict:
         except OSError:
             for f, m in moved:  # roll back so no rows disappear
                 os.replace(m, f)
-            out[str(day_dir.relative_to(root))] = {"skipped": "file in use"}
+            out[day_dir.relative_to(root).as_posix()] = {"skipped": "file in use"}
             continue
         for _, m in moved:
             try:
                 m.unlink()
             except OSError:
                 pass  # outside the *.parquet glob; removed on the next run
-        out[str(day_dir.relative_to(root))] = {"files": len(files), "rows": merged.num_rows}
+        out[day_dir.relative_to(root).as_posix()] = {"files": len(files), "rows": merged.num_rows}
     return out
