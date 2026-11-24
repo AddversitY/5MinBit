@@ -74,6 +74,25 @@ Chronological log of work, findings and decisions. Times are UTC.
   +1 s (ρ = 0.50), then arrives 1.5 s later. The Coinbase−Chainlink gap predicts the next 5 s
   of Chainlink (ρ = 0.21) but not 30 s (ρ = 0.06), so it is a near-expiry effect only.
 
+### Phase 8: deployment and reliability (07:30–09:30)
+* CI now runs (the repository was made public, which gives it Actions minutes; before that
+  every job was refused before starting). Jobs: Linux pytest, dashboard build, and a
+  **Windows** job that runs the Windows paper-test runner exactly as a user would, the test
+  suite, a server start-up with `/api/health`, and the one-writer-per-ledger check.
+* Windows runner (`scripts/windows/`): per-user `uv`, Python 3.13, checksum-verified portable
+  Node.js for the dashboard, keep-awake while running, restart loop, optional Startup-folder
+  autostart. No admin rights, keys or wallet. The owner started the long paper test on their
+  desktop with it on 2026-11-24.
+* `btc5m serve` takes an OS-level lock next to the ledger; a second server on the same data
+  directory exits (code 3) instead of forking the hash chain.
+* Live compaction no longer risks duplicates or lost rows if a file is locked (Windows).
+* Dataset build memory: ~20M Polymarket trade rows held as text ids needed ~9 GB and
+  threatened the live server; the loader now reads one batch at a time and keeps only
+  booleans and numbers (~1 GB peak). Exact duplicate rows are now judged including the
+  transaction hash (there were none: 19,893,249 rows before and after).
+* Settlement re-verified on ~4 h of recorded streams: price to beat = TWAP-60 at the start
+  second on 45/45 rounds, final = TWAP-60 at the end second on 44/44.
+
 ### Open items
 * Full walk-forward run on ≥ 45 days (then MODEL_RESULTS.md).
 * 1,000-round live paper milestone (~3.5 days of uptime; this container is ephemeral).

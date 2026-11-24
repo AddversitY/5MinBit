@@ -24,8 +24,12 @@ import pandas as pd
 def prepare_round_trades(tr: pd.DataFrame, token_up: str) -> pd.DataFrame:
     """Add up-equivalent ask/bid evidence columns; sort by time."""
     t = tr.sort_values("ts", kind="stable").reset_index(drop=True)
-    is_up = (t["token_id"] == token_up).to_numpy()
-    buy = (t["side"] == "BUY").to_numpy()
+    if "is_up" in t.columns:  # pre-reduced history (load_pm_trades with token_up)
+        is_up = t["is_up"].to_numpy(dtype=bool)
+        buy = t["buy"].to_numpy(dtype=bool)
+    else:
+        is_up = (t["token_id"] == token_up).to_numpy()
+        buy = (t["side"] == "BUY").to_numpy()
     p = t["price"].to_numpy()
     up_px = np.where(is_up, p, 1.0 - p)
     # +1: evidence of Up ask (someone lifted Up / hit a Down bid); -1: evidence of Up bid

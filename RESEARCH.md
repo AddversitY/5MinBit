@@ -37,10 +37,11 @@ RTDS socket relays both the Chainlink BTC/USD spot stream (`crypto_prices_chainl
 official `eventMetadata` of resolved rounds (`scripts/verify_settlement.py`):
 
 * **`priceToBeat` = TWAP-60 stream value at the round start second.** Absolute difference
-  0.00000 on every round checked.
+  0.00000 on all 45 rounds checked (re-run 2026-11-24 09:20 UTC on ~4 h of recorded stream).
 * **`finalPrice` = TWAP-60 stream value at the round end second.** Absolute difference
-  0.00000 on every round checked. The spot stream at the end second differs from `finalPrice`
-  by $11–$41, which confirms that settlement uses the TWAP, not spot.
+  0.00000 on all 44 resolved rounds checked. The spot stream at the end second differs from
+  `finalPrice` by $16 on average (up to $52), which confirms that settlement uses the TWAP,
+  not spot.
 * The TWAP-60 value at t ≈ the mean of the 1-second Chainlink spot samples over `[t-60, t)`:
   mean absolute error $0.52 over 263 seconds, versus $0.84 for `(t-60, t]`. It is not exact
   because Chainlink averages its own higher-frequency reports. The settlement therefore

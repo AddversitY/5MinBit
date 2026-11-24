@@ -160,13 +160,34 @@ def _init_worker(g):
     _G.update(g)
 
 
-def load_pm_trades() -> dict:
+def load_pm_trades(token_up: dict[str, str] | None = None) -> dict:
+    """Polymarket taker trades per condition id, reduced to the columns features need.
+
+    Read one batch file at a time (each holds complete markets) so peak memory stays small:
+    ~20M rows of text ids would otherwise need ~9 GB. Exact duplicate rows (same transaction,
+    price, size, time) are dropped. With ``token_up`` ({condition_id: Up token id}) the token
+    and side strings are replaced by booleans ``is_up`` and ``buy``.
+    """
     files = sorted(glob.glob(str(data_dir() / "hist" / "pm_trades" / "batch-*.parquet")))
-    if not files:
-        return {}
-    df = pd.concat([pd.read_parquet(f, columns=["condition_id", "token_id", "side", "price", "size", "ts"]) for f in files], ignore_index=True)
-    df = df.drop_duplicates()
-    return {cid: g for cid, g in df.groupby("condition_id", sort=False)}
+    out: dict = {}
+    cols = ["condition_id", "token_id", "side", "price", "size", "ts", "tx"]
+    for f in files:
+        t = pd.read_parquet(f, columns=cols).drop_duplicates().drop(columns="tx")
+        for cid, g in t.groupby("condition_id", sort=False):
+            if token_up is None:
+                out[cid] = g.drop(columns="condition_id").reset_index(drop=True)
+                continue
+            up = token_up.get(cid)
+            if up is None:
+                continue
+            out[cid] = pd.DataFrame({
+                "is_up": g["token_id"].to_numpy() == up,
+                "buy": g["side"].to_numpy() == "BUY",
+                "price": g["price"].to_numpy(),
+                "size": g["size"].to_numpy(),
+                "ts": g["ts"].to_numpy(),
+            })
+    return out
 
 
 def code_version() -> str:
@@ -185,7 +206,7 @@ def build_dataset(source: str = "kraken", workers: int | None = None, out: Path 
     bars = load_kraken_bars()
     candles = pd.read_parquet(data_dir() / "hist" / "coinbase_candles_1m" / "candles.parquet")
     volctx = minute_vol_context(candles)
-    pm = load_pm_trades()
+    pm = load_pm_trades(dict(zip(rounds["condition_id"], rounds["token_up"])))
     g = {"bars": bars, "volctx": volctx, "checkpoints": cfg.rounds["checkpoints_s"], "pm": pm}
     recs = rounds.to_dict("records")
     log.info("dataset_build_start", rounds=len(recs), pm_markets=len(pm), bars_days=int(bars.day_covered.sum()))
