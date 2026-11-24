@@ -130,6 +130,61 @@ const PROB_SERIES: SeriesSpec[] = [
   { label: "Market mid P(Up)", color: "--s2" },
 ];
 
+
+function Verdict({ wf }: { wf: Any }) {
+  if (!wf) return null;
+  const ks = ["0", "15", "30", "45", "60", "90", "120", "180", "240"];
+  return (
+    <div className="card" style={{ marginTop: 12 }}>
+      <h2>
+        Research verdict: does any model beat the market? <span className="tag verified">out-of-sample evidence</span>
+      </h2>
+      <div className="lbl" style={{ marginBottom: 6 }}>
+        Report {wf.report}
+        {wf.quick ? " (quick mode, small sample)" : ""}. Δ Brier = model − market on the same unseen rounds (negative = model better). b2 &gt; 0 with CI above 0 = model has information the market
+        price lacks.
+      </div>
+      <div className="scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>k</th>
+              <th>n</th>
+              <th>Market Brier</th>
+              <th>Best model Δ Brier [95% CI]</th>
+              <th>Gaussian b2 [95% CI]</th>
+              <th>Verdict</th>
+            </tr>
+          </thead>
+          <tbody>
+            {ks
+              .filter((k) => wf.vs_market?.[k])
+              .map((k) => {
+                const vm = wf.vs_market[k];
+                const cands = Object.entries(vm).filter(([m]) => m.startsWith("p_") && m !== "p_stack_mkt") as [string, Any][];
+                const best = cands.sort((a, b) => a[1].d_vs_market - b[1].d_vs_market)[0];
+                const enc = wf.encompassing?.[k]?.p_gaussian_rw;
+                const sig = best && best[1].ci95 && best[1].ci95[1] < 0;
+                return (
+                  <tr key={k}>
+                    <td>{k}s</td>
+                    <td>{vm.n}</td>
+                    <td>{num(vm.market_brier, 4)}</td>
+                    <td>
+                      {best ? `${best[0].replace("p_", "")}: ${num(best[1].d_vs_market, 4)} [${num(best[1].ci95[0], 4)}, ${num(best[1].ci95[1], 4)}]` : "—"}
+                    </td>
+                    <td>{enc ? `${num(enc.b_gap, 2)} [${num(enc.ci[0], 2)}, ${num(enc.ci[1], 2)}]` : "—"}</td>
+                    <td className={sig ? "st-ok" : ""}>{sig ? "✓ model better (significant)" : "✕ no edge vs market"}</td>
+                  </tr>
+                );
+              })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [s, wsOk] = useLiveState();
   const series: Any[] = useJson("/api/series?seconds=900", 2000, []);
@@ -519,6 +574,8 @@ export default function App() {
           </div>
         </div>
       </div>
+
+      <Verdict wf={wf} />
 
       <footer>
         Verified data = values received from Polymarket, Chainlink (via Polymarket RTDS), Coinbase and Kraken feeds. Model estimates are statistical outputs and may be wrong. Nothing here is investment advice;

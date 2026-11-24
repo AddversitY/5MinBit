@@ -231,6 +231,44 @@ def encompassing_test(P: pd.DataFrame, model_cols: list[str], n_boot: int = 300)
     return out
 
 
+def market_calibration(P: pd.DataFrame) -> dict:
+    """Is Polymarket's mid itself calibrated? Reliability by price bucket with block-bootstrap
+    CIs, plus a pre-registered (fixed-threshold, exploratory) favourite-buying test."""
+    out = {"reliability": [], "favourite_test": {}}
+    if "pm_mid" not in P.columns:
+        return out
+    h = P[np.isfinite(P["pm_mid"])].reset_index(drop=True)
+    edges = [0, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 1.0001]
+    b = np.digitize(h["pm_mid"], edges) - 1
+    y, pm, blocks = h["y"].to_numpy(), h["pm_mid"].to_numpy(), h["day"].to_numpy()
+    for i in range(len(edges) - 1):
+        m = b == i
+        if m.sum() < 50:
+            continue
+        idx = np.where(m)[0]
+        pt, lo, hi = M.day_block_bootstrap(lambda j: float(np.mean(y[idx][j] - pm[idx][j])), blocks[idx], n_boot=400)
+        out["reliability"].append({"bucket": f"{edges[i]:.2f}-{min(edges[i + 1], 1):.2f}", "n": int(m.sum()), "mean_mid": float(pm[m].mean()),
+                                   "freq_up": float(y[m].mean()), "freq_minus_mid": pt, "ci95": [lo, hi]})
+    if "fill_up_l2" in h.columns:
+        cur = FeeSchedule(0.05, 1.0)
+        for thr in (0.80, 0.90, 0.95):
+            for k, g in h.groupby("k"):
+                g = g.reset_index(drop=True)
+                fav_up = g["pm_mid"].to_numpy() >= thr
+                fav_dn = g["pm_mid"].to_numpy() <= 1 - thr
+                sel = fav_up | fav_dn
+                if not sel.any():
+                    continue
+                gg = g[sel].copy()
+                # only the favourite leg may trade: blank the other leg's executable price
+                gg.loc[~fav_up[sel], "fill_up_l2"] = np.nan
+                gg.loc[~fav_dn[sel], "fill_dn_l2"] = np.nan
+                p = np.where(fav_up[sel], 1.0, 0.0)
+                tr = simulate(gg, p, edge=-1.0, latency=2, fee=cur)
+                out["favourite_test"].setdefault(f"mid>={thr:.2f}", {})[int(k)] = summarize_trades(tr, int(g["start"].nunique()))
+    return out
+
+
 def trading_eval(P: pd.DataFrame, model_cols: list[str]) -> dict:
     out = {}
     if "fill_up_l2" not in P.columns:
@@ -344,6 +382,7 @@ def run_evaluation(quick: bool = False, dataset: Path | None = None) -> Path:
         "metrics": evaluate_predictions(P, model_cols),
         "training_performance": train_perf,
         "encompassing": encompassing_test(P, [c for c in ("p_gaussian_rw", "p_vol_platt", "p_logreg", "p_lgbm_resid", "p_ensemble") if c in P.columns]),
+        "market_calibration": market_calibration(P),
         "trading": trading_eval(P, ["p_gaussian_rw", "p_vol_platt", "p_logreg", "p_lightgbm", "p_lgbm_resid", "p_ensemble"]),
     }
     if imps:

@@ -169,6 +169,28 @@ def render(rep: dict) -> str:
                 if r and r.get("trades"):
                     ci = r["mean_pnl_ci95"]
                     a(f"| {k} | {m.replace('p_', '')} | {r['trades']:,} | {r['mean_pnl_per_share']:+.4f} [{ci[0]:+.4f}, {ci[1]:+.4f}] |")
+    mc = rep.get("market_calibration") or {}
+    if mc.get("reliability"):
+        a("")
+        a("### Is the market itself calibrated? (Polymarket mid, all checkpoints pooled)")
+        a("")
+        a("| mid bucket | n | mean mid | realised Up freq | freq − mid [95% CI] |")
+        a("|---|---:|---:|---:|---|")
+        for r in mc["reliability"]:
+            lo, hi = r["ci95"]
+            flag = " ✓" if lo > 0 or hi < 0 else ""
+            a(f"| {r['bucket']} | {r['n']:,} | {r['mean_mid']:.3f} | {r['freq_up']:.3f} | {r['freq_minus_mid']:+.3f} [{lo:+.3f}, {hi:+.3f}]{flag} |")
+    if mc.get("favourite_test"):
+        a("")
+        a("Exploratory, pre-registered favourite-buying test (buy the side whose mid ≥ threshold; fill = next taker print after 2 s + 1 tick; fee 0.05):")
+        a("")
+        a("| rule | k (s) | trades | hit rate | avg price | mean PnL/share [95% CI] |")
+        a("|---|---|---:|---:|---:|---|")
+        for rule, ks in mc["favourite_test"].items():
+            for k, r in ks.items():
+                if r.get("trades"):
+                    ci = r["mean_pnl_ci95"]
+                    a(f"| {rule} | {k} | {r['trades']:,} | {r['hit_rate']:.3f} | {r['avg_price']:.3f} | {r['mean_pnl_per_share']:+.4f} [{ci[0]:+.4f}, {ci[1]:+.4f}] |")
     eg = rep.get("era_gaussian") or {}
     if eg:
         a("")

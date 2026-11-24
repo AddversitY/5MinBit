@@ -118,6 +118,9 @@ def performance():
             "by_checkpoint": {k: {m: {x: v[m][x] for x in ("n", "accuracy", "brier", "logloss", "ece")} for m in v if m in ("p_gaussian_rw", "p_vol_platt", "p_logreg", "p_lightgbm", "p_ensemble")} for k, v in bc.items()},
             "vs_market": {k: {"n": v["n"], "market_brier": v["market"]["brier"], **{m: {"brier": v[m]["brier"], "d_vs_market": v[m]["d_brier_vs_market"], "ci95": v[m]["ci95"]} for m in v if m.startswith("p_")}} for k, v in vm.items()},
             "proxy_quality": rep.get("proxy_quality"),
+            "encompassing": {k: {m: {"b_gap": v[m]["b_gap"], "ci": v[m]["b_gap_ci"], "adds_info": v[m]["model_adds_info"]} for m in v if m.startswith("p_")}
+                             for k, v in (rep.get("encompassing") or {}).items()},
+            "quick": rep.get("quick", False),
         }
     out = _clean({"walk_forward": summary, "paper": paper_report(), "registry": read_registry()})
     _perf_cache.update(t=time.time(), v=out)
