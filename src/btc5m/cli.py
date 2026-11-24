@@ -96,6 +96,13 @@ def main(argv: list[str] | None = None) -> int:
     elif a.cmd == "serve":
         import uvicorn
 
+        from btc5m.live.ledger import LedgerError, acquire_writer_lock
+
+        try:
+            _lock = acquire_writer_lock(cfg.path("ledger"))  # noqa: F841  (held until exit)
+        except LedgerError as e:
+            print(f"btc5m: {e}", file=sys.stderr)
+            return 3
         uvicorn.run("btc5m.api.server:app", host=a.host, port=a.port, log_level="info")
     elif a.cmd == "report":
         from btc5m.eval.report import render_file

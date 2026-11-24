@@ -30,7 +30,7 @@ Requirements: Python ≥ 3.11, Node ≥ 18 (dashboard build only).
 ```bash
 python -m venv .venv && . .venv/bin/activate     # or: uv venv && uv pip install -e ".[dev]"
 pip install -e ".[dev]"
-pytest -q                                         # 38 tests: rules, leakage, ledger, models, parsers
+pytest -q                                         # 41 tests: rules, leakage, ledger, models, parsers
 
 # 1. history (resumable; Kraken is the slow one at ~3–4 min per day of history)
 btc5m backfill-rounds --days 280       # Gamma: every round, official price to beat/final, outcome, fees, method
@@ -58,6 +58,22 @@ python scripts/verify_settlement.py    # re-check price to beat / final vs the C
 
 Configuration: `config/default.yaml`. Override with `config/local.yaml` or
 `BTC5M_CONFIG=/path.yaml`. Set `BTC5M_PERSIST=0` to run the server without writing raw data.
+
+### Long-running paper test
+
+The paper test needs a machine that stays on for days (≥ 1,000 rounds ≈ 3.5 days).
+
+* **Linux/macOS/any Docker host:** `docker compose up -d --build` (dashboard on
+  `127.0.0.1:8000`), or the systemd unit in `deploy/btc5m.service`.
+* **Windows (no admin rights, no Docker):** double-click `scripts\windows\start-paper-test.cmd`,
+  or run `powershell -ExecutionPolicy Bypass -File scripts\windows\run-paper-test.ps1 -InstallAutostart`.
+  The script installs `uv` per-user, creates a Python 3.13 environment, builds the dashboard with
+  a checksum-verified portable Node.js if none is installed, keeps Windows awake while running,
+  restarts the server if it stops, and (with `-InstallAutostart`) starts minimized at log-on.
+  Logs: `data\logs\serve.log`.
+
+Only one server may write a given ledger; a second `btc5m serve` on the same data directory
+exits with code 3 instead of forking the hash chain.
 
 ## What the dashboard shows
 

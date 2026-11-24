@@ -108,14 +108,21 @@ def compact(min_age_s: float = 3600.0) -> dict:
     """Merge each live stream's small Parquet files per day into one file.
 
     Only files older than ``min_age_s`` are merged (the writer may still be appending to the
-    current period). The merged file is written atomically before the originals are removed,
-    so readers can briefly see duplicates but never lose rows.
+    current period). The originals are first renamed out of the ``*.parquet`` glob (undone if
+    any rename fails, e.g. a file locked by another process on Windows), then the merged file
+    is written atomically, then the renamed originals are deleted. Readers can briefly miss
+    rows during a merge but never see duplicates, and no rows are lost.
     """
     import glob as _glob
 
     out = {}
     now = time.time()
     root = data_dir() / "raw" / "live"
+    for stale in root.glob("*/date=*/*.parquet.merging"):  # leftovers from an interrupted delete
+        try:
+            stale.unlink()
+        except OSError:
+            pass
     for day_dir in sorted(root.glob("*/date=*")):
         files = [Path(f) for f in _glob.glob(str(day_dir / "*.parquet")) if not Path(f).name.startswith("compact-")]
         files = [f for f in files if now - f.stat().st_mtime > min_age_s]
@@ -123,9 +130,23 @@ def compact(min_age_s: float = 3600.0) -> dict:
             continue
         tables = [pq.read_table(f) for f in files]
         merged = pa.concat_tables(tables, promote_options="default")
-        target = day_dir / f"compact-{int(now)}-{os.getpid()}.parquet"
-        write_parquet_atomic(merged, target)
-        for f in files:
-            f.unlink()
+        moved: list[tuple[Path, Path]] = []
+        try:
+            for f in files:
+                m = f.with_name(f.name + ".merging")
+                os.replace(f, m)
+                moved.append((f, m))
+            target = day_dir / f"compact-{int(now)}-{os.getpid()}.parquet"
+            write_parquet_atomic(merged, target)
+        except OSError:
+            for f, m in moved:  # roll back so no rows disappear
+                os.replace(m, f)
+            out[str(day_dir.relative_to(root))] = {"skipped": "file in use"}
+            continue
+        for _, m in moved:
+            try:
+                m.unlink()
+            except OSError:
+                pass  # outside the *.parquet glob; removed on the next run
         out[str(day_dir.relative_to(root))] = {"files": len(files), "rows": merged.num_rows}
     return out

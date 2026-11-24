@@ -72,3 +72,20 @@ def test_settlement_rules(tmp_path):
     assert s is not None and s["ref_hash"] == q["hash"]
     assert led2.add_settlement(q["hash"], {"outcome_up": 0}) is None  # only once
     assert Ledger(tmp_path / "l2.jsonl").verify()[0]
+
+
+def test_single_writer_lock(tmp_path):
+    import subprocess
+    import sys
+
+    from btc5m.live.ledger import acquire_writer_lock
+
+    path = tmp_path / "ledger" / "predictions.jsonl"
+    held = acquire_writer_lock(path)
+    code = (
+        "import sys; from btc5m.live.ledger import acquire_writer_lock, LedgerError\n"
+        f"try:\n    acquire_writer_lock(r'{path}')\nexcept LedgerError:\n    sys.exit(7)\n"
+    )
+    assert subprocess.run([sys.executable, "-c", code]).returncode == 7
+    held.close()
+    assert subprocess.run([sys.executable, "-c", code]).returncode == 0

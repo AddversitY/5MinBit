@@ -37,6 +37,32 @@ class LedgerError(Exception):
     pass
 
 
+def acquire_writer_lock(ledger_path: Path):
+    """Allow one ledger-writing process per data directory.
+
+    Two servers appending to the same file would fork the hash chain. Returns an open file
+    whose OS-level lock lasts for the life of the process; raises ``LedgerError`` if another
+    process holds it.
+    """
+    lock_path = Path(ledger_path).with_suffix(".lock")
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    f = open(lock_path, "a+", encoding="utf-8")
+    try:
+        if os.name == "nt":
+            import msvcrt
+
+            f.seek(0)
+            msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError as e:
+        f.close()
+        raise LedgerError(f"another btc5m server is already writing {ledger_path}") from e
+    return f
+
+
 class Ledger:
     def __init__(self, path: Path):
         self.path = Path(path)
@@ -55,7 +81,7 @@ class Ledger:
         return cls(load_config().path("ledger"))
 
     def _load(self) -> None:
-        with open(self.path) as f:
+        with open(self.path, encoding="utf-8") as f:
             for line in f:
                 if not line.strip():
                     continue
@@ -76,7 +102,7 @@ class Ledger:
             rec["written_at"] = time.time()
             rec["hash"] = record_hash(rec)
             line = json.dumps(rec, sort_keys=True, separators=(",", ":"), default=float)
-            with open(self.path, "a") as f:
+            with open(self.path, "a", encoding="utf-8", newline="\n") as f:
                 f.write(line + "\n")
                 f.flush()
                 os.fsync(f.fileno())
@@ -114,7 +140,7 @@ class Ledger:
     def records(self) -> list[dict]:
         if not self.path.exists():
             return []
-        with open(self.path) as f:
+        with open(self.path, encoding="utf-8") as f:
             return [json.loads(x) for x in f if x.strip()]
 
     @property
@@ -125,7 +151,7 @@ class Ledger:
         prev, n = GENESIS, 0
         if not self.path.exists():
             return True, 0, "empty"
-        with open(self.path) as f:
+        with open(self.path, encoding="utf-8") as f:
             for i, line in enumerate(f, 1):
                 if not line.strip():
                     continue

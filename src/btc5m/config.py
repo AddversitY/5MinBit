@@ -39,10 +39,10 @@ class Config(dict):
 
 @lru_cache(maxsize=1)
 def load_config() -> Config:
-    base = yaml.safe_load((ROOT / "config" / "default.yaml").read_text())
+    base = yaml.safe_load((ROOT / "config" / "default.yaml").read_text(encoding="utf-8"))
     override_path = os.environ.get("BTC5M_CONFIG") or str(ROOT / "config" / "local.yaml")
     if Path(override_path).exists():
-        base = _deep_merge(base, yaml.safe_load(Path(override_path).read_text()) or {})
+        base = _deep_merge(base, yaml.safe_load(Path(override_path).read_text(encoding="utf-8")) or {})
     if base.get("mode") != "paper":
         raise ValueError("Only mode=paper is supported. This system never trades.")
     return Config(base)

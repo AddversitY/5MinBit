@@ -12,3 +12,4 @@ dashboard/dist/
 *.log
 *.egg-info/
 *.tsbuildinfo
+.tools/
