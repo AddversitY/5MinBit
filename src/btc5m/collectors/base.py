@@ -67,7 +67,7 @@ class WSCollector:
 
     def __init__(self):
         self.health = FeedHealth(self.name)
-        self.log = get_logger(f"collector.{self.name}")
+        self.log = get_logger(f"collector.{self.name}").bind(feed=self.name)
         self._stop = asyncio.Event()
         self._ws = None
 
