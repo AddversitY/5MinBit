@@ -15,7 +15,8 @@ param(
     [int]$Port = 8000,
     [switch]$InstallAutostart,
     [switch]$RemoveAutostart,
-    [switch]$RebuildDashboard
+    [switch]$RebuildDashboard,
+    [switch]$SetupOnly        # install everything, then exit without starting (used by CI)
 )
 $ErrorActionPreference = "Stop"
 $Root = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
@@ -87,6 +88,8 @@ if ($RebuildDashboard -or -not (Test-Path "dashboard\dist\index.html")) {
         Invoke-Checked "dashboard build" { npm.cmd run build }
     } finally { Pop-Location }
 }
+
+if ($SetupOnly) { Write-Host "Setup complete."; exit 0 }
 
 # 4. Optional: start automatically at log-on (a launcher in the user's Startup folder; no admin rights)
 if ($InstallAutostart) {
